@@ -1,5 +1,4 @@
 import { HairColors, Palette, SkinTones } from "../core/constants";
-import { HairStyles } from "../core/identity";
 import { px } from "../core/math";
 import type { Appearance, LimbId } from "../core/types";
 import { armorById } from "../armor/catalog";
@@ -9,6 +8,29 @@ import type { WeaponEntity } from "../weapons/Weapon";
 import type { ParticleSystem } from "./Particles";
 import type { Camera } from "../engine/Camera";
 import { GAME_H, GAME_W } from "../core/constants";
+import {
+  OUTLINE,
+  drawArenaFloor,
+  drawAxe,
+  drawBleachers,
+  drawBow,
+  drawCape,
+  drawDistantArch,
+  drawFace,
+  drawHairStrand,
+  drawHammer,
+  drawHelmet,
+  drawLimb,
+  drawMace,
+  drawPillar,
+  drawSandShadow,
+  drawShield,
+  drawSpear,
+  drawSword,
+  fillRect,
+  outlinedRect,
+  shade,
+} from "./PixelArt";
 
 export class WorldRenderer {
   buf: HTMLCanvasElement;
@@ -46,22 +68,13 @@ export class WorldRenderer {
       });
     }
     for (const w of loose) {
-      drawables.push({
-        z: w.body.position.y,
-        fn: () => this.weapon(w, camera),
-      });
+      drawables.push({ z: w.body.position.y, fn: () => this.weapon(w, camera) });
     }
     for (const a of arrows) {
-      drawables.push({
-        z: a.position.y,
-        fn: () => this.arrow(a, camera),
-      });
+      drawables.push({ z: a.position.y, fn: () => this.arrow(a, camera) });
     }
     for (const f of fighters) {
-      drawables.push({
-        z: f.pelvis.position.y,
-        fn: () => this.fighter(f, camera),
-      });
+      drawables.push({ z: f.pelvis.position.y, fn: () => this.fighter(f, camera) });
     }
     drawables.sort((a, b) => a.z - b.z);
     for (const d of drawables) d.fn();
@@ -72,58 +85,52 @@ export class WorldRenderer {
   private bg(arena: ArenaInstance, cam: Camera) {
     const c = this.ctx;
     const def = arena.def;
-    for (let i = 0; i < 3; i++) {
-      const par = 0.15 + i * 0.22;
-      const x = -((cam.x * par) % 48);
-      c.fillStyle = def.bg[Math.min(i, def.bg.length - 1)];
-      if (i === 0) {
-        c.fillRect(0, 0, GAME_W, GAME_H);
-        continue;
-      }
-      for (let col = -2; col < 18; col++) {
-        const px0 = x + col * 48;
-        const h = 40 + ((col * 13) % 50) + i * 20;
-        c.fillRect(px(px0), px(GAME_H - 70 - h + i * 8), 20 + i * 6, h);
-      }
+    const groundScreen = this.w2s(def.w / 2, def.ground, cam).y;
+
+    const sky = c.createLinearGradient(0, 0, 0, groundScreen);
+    sky.addColorStop(0, def.bg[0]);
+    sky.addColorStop(0.55, def.bg[1] ?? def.bg[0]);
+    sky.addColorStop(1, def.bg[2] ?? Palette.sand);
+    c.fillStyle = sky;
+    c.fillRect(0, 0, GAME_W, GAME_H);
+
+    const par = cam.x * 0.06;
+    for (let i = -2; i < 12; i++) {
+      const ax = ((i * 90 - par * 0.3) % (GAME_W + 90)) - 40;
+      drawDistantArch(c, ax, groundScreen - 90, 50 + (i % 3) * 12, shade(def.bg[1] ?? "#6b3a28", -20));
     }
+
+    for (let i = -2; i < 16; i++) {
+      const px0 = i * 52 - (par % 52);
+      const ph = 70 + (i % 4) * 18;
+      drawPillar(c, px0, groundScreen - 8, ph);
+    }
+
+    drawBleachers(c, groundScreen, cam.x, GAME_W);
+
     for (const p of def.platforms) this.plat(p.x, p.y, p.w, p.h, cam, def.accent);
-    const g = this.w2s(def.w / 2, def.ground, cam);
-    c.fillStyle = def.bg[2] ?? Palette.sand;
-    c.fillRect(0, px(g.y), GAME_W, GAME_H);
-    c.fillStyle = "#00000033";
-    for (let i = 0; i < GAME_W; i += 8) c.fillRect(i, px(g.y), 4, 4);
-    c.fillStyle = "#ffffff18";
-    for (let i = 4; i < GAME_W; i += 16) c.fillRect(i, px(g.y) + 8, 8, 8);
+
+    drawArenaFloor(c, px(groundScreen), GAME_W);
+
     for (const pit of def.pits) {
       const s = this.w2s(pit.x, def.ground, cam);
-      c.fillStyle = "#07080c";
-      c.fillRect(px(s.x - pit.w / 2 * cam.zoom), px(s.y), px(pit.w * cam.zoom), 80);
+      fillRect(c, s.x - (pit.w / 2) * cam.zoom, s.y, pit.w * cam.zoom, 80, "#1a120e");
+      fillRect(c, s.x - (pit.w / 2) * cam.zoom + 4, s.y + 4, pit.w * cam.zoom - 8, 6, "#2a1c12");
     }
     for (const t of def.traps) {
       const s = this.w2s(t.x, t.y, cam);
-      c.fillStyle = Palette.crimson;
-      c.fillRect(px(s.x - t.w / 2 * cam.zoom), px(s.y), px(t.w * cam.zoom), px(6 * cam.zoom));
-    }
-    this.columns(def, cam);
-  }
-
-  private columns(def: ArenaInstance["def"], cam: Camera) {
-    const c = this.ctx;
-    c.fillStyle = def.accent + "99";
-    for (const x of [80, def.w - 80, 200, def.w - 200]) {
-      const s = this.w2s(x, def.ground, cam);
-      c.fillRect(px(s.x - 8), px(s.y - 160 * cam.zoom), px(16 * cam.zoom), px(160 * cam.zoom));
-      c.fillRect(px(s.x - 14), px(s.y - 168 * cam.zoom), px(28 * cam.zoom), px(10 * cam.zoom));
+      for (let i = 0; i < 5; i++) {
+        fillRect(c, s.x - 10 + i * 5, s.y - 8, 3, 10, "#8aa0b3");
+        fillRect(c, s.x - 9 + i * 5, s.y - 10, 2, 3, shade("#8aa0b3", 20));
+      }
     }
   }
 
   private plat(x: number, y: number, w: number, h: number, cam: Camera, color: string) {
     const s = this.w2s(x, y, cam);
     const c = this.ctx;
-    c.fillStyle = color;
-    c.fillRect(px(s.x - (w / 2) * cam.zoom), px(s.y - (h / 2) * cam.zoom), px(w * cam.zoom), px(h * cam.zoom));
-    c.fillStyle = "#00000044";
-    c.fillRect(px(s.x - (w / 2) * cam.zoom), px(s.y + (h / 2) * cam.zoom - 3), px(w * cam.zoom), 3);
+    outlinedRect(c, s.x - (w / 2) * cam.zoom, s.y - (h / 2) * cam.zoom, w * cam.zoom, h * cam.zoom, color);
+    fillRect(c, s.x - (w / 2) * cam.zoom, s.y + (h / 2) * cam.zoom - 3, w * cam.zoom, 3, "#00000055");
   }
 
   private fighter(f: Fighter, cam: Camera) {
@@ -132,8 +139,10 @@ export class WorldRenderer {
       Math.max(f.ragdoll.bodies.footL.position.y, f.ragdoll.bodies.footR.position.y),
       cam,
     );
-    this.ctx.fillStyle = "#00000055";
-    this.ctx.fillRect(px(feet.x - 14 * cam.zoom), px(feet.y - 2), px(28 * cam.zoom), 4);
+    drawSandShadow(this.ctx, feet.x, feet.y + 2, 16 * cam.zoom);
+
+    if (f.appearance.accessory === 1) this.cape(f, cam);
+
     const order: LimbId[] = [
       "footL",
       "shinL",
@@ -156,7 +165,32 @@ export class WorldRenderer {
       if (id === "handR" && f.weapon) this.weapon(f.weapon, cam);
       this.limb(f, id, cam);
     }
-    this.hair(f, cam);
+    if (!this.hasHelmet(f)) this.hair(f, cam);
+  }
+
+  private cape(f: Fighter, cam: Camera) {
+    const b = f.torso;
+    const s = this.w2s(b.position.x - f.facing * 6, b.position.y + 4, cam);
+    const c = this.ctx;
+    c.save();
+    c.translate(px(s.x), px(s.y));
+    c.rotate(b.angle);
+    drawCape(c, shade(f.appearance.primary, -15), Math.sin(this.time * 3 + f.group) * 2);
+    c.restore();
+  }
+
+  private hasHelmet(f: Fighter) {
+    const h = armorById(f.loadout.armor.helmet);
+    return h && !h.id.includes("cloth") && !h.id.includes("wrap");
+  }
+
+  private limbKind(id: LimbId): "arm" | "leg" | "torso" | "pelvis" | "hand" | "foot" {
+    if (id === "torso") return "torso";
+    if (id === "pelvis") return "pelvis";
+    if (id.startsWith("hand")) return "hand";
+    if (id.startsWith("foot")) return "foot";
+    if (id.startsWith("thigh") || id.startsWith("shin")) return "leg";
+    return "arm";
   }
 
   private limb(f: Fighter, id: LimbId, cam: Camera) {
@@ -170,25 +204,33 @@ export class WorldRenderer {
     const z = cam.zoom;
     const w = (b.bounds.max.x - b.bounds.min.x) * z;
     const h = (b.bounds.max.y - b.bounds.min.y) * z;
-    const col = this.limbColor(f, id, skin);
-    const drawCol = f.flash > 0 ? "#f0e6d0" : col;
-    c.fillStyle = "#140e0a";
-    c.fillRect(px(-w / 2) - 1, px(-h / 2) - 1, px(w) + 2, px(h) + 2);
-    c.fillStyle = drawCol;
+    const { fill, trim, metal } = this.limbStyle(f, id, skin);
+    const drawCol = f.flash > 0 ? "#fff4dc" : fill;
+
     if (id === "head") {
-      c.beginPath();
-      c.arc(0, 0, px(Math.max(w, h) / 2), 0, Math.PI * 2);
-      c.fill();
-      this.face(f, c, Math.max(w, h) / 2);
-    } else {
-      c.fillRect(px(-w / 2), px(-h / 2), px(w), px(h));
-      c.fillStyle = "#ffffff22";
-      c.fillRect(px(-w / 2), px(-h / 2), px(w), 2);
+      const r = Math.max(w, h) / 2;
+      if (this.hasHelmet(f)) {
+        const helm = armorById(f.loadout.armor.helmet);
+        const style = helm?.id.includes("crest") ? "crest" : helm?.id.includes("ridge") ? "grill" : "open";
+        drawHelmet(c, r, helm?.color ?? "#8aa0b3", f.appearance.secondary, style as "open" | "grill" | "crest");
+      } else {
+        drawFace(c, r, drawCol, f.appearance.face, f.facing);
+      }
+      c.restore();
+      return;
+    }
+
+    drawLimb(c, this.limbKind(id), w, h, drawCol, trim ?? metal);
+    if (id === "torso" && metal) {
+      const chest = armorById(f.loadout.armor.chest);
+      if (chest?.id.includes("scale") || chest?.id.includes("muscle")) {
+        for (let i = 0; i < 5; i++) fillRect(c, -w / 2 + 2, -h / 2 + 3 + i * 5, w - 4, 3, metal);
+      }
     }
     c.restore();
   }
 
-  private limbColor(f: Fighter, id: LimbId, skin: string) {
+  private limbStyle(f: Fighter, id: LimbId, skin: string) {
     const a = f.appearance;
     const slot =
       id === "head"
@@ -204,72 +246,46 @@ export class WorldRenderer {
                 : id.startsWith("foot")
                   ? "boots"
                   : null;
-    if (slot) {
-      const piece = armorById(f.loadout.armor[slot]);
-      if (piece) {
-        if (piece.id.includes("leather") || piece.id.includes("wrap") || piece.id.includes("cloth") || piece.id.includes("sandals")) {
-          return slot === "chest" || slot === "legs" ? f.appearance.primary : piece.color;
-        }
-        return piece.color;
+    const piece = slot ? armorById(f.loadout.armor[slot]) : null;
+    let fill = skin;
+    let trim: string | undefined;
+    let metal: string | undefined;
+
+    if (id === "torso" || id === "pelvis") fill = a.primary;
+    if (piece) {
+      if (slot === "chest") {
+        fill = piece.id.includes("leather") || piece.id.includes("harness") ? a.primary : piece.color;
+        metal = piece.color;
+        trim = piece.trim;
+      } else if (slot === "legs") {
+        fill = piece.id.includes("wrap") ? a.secondary : piece.color;
+        trim = piece.trim;
+      } else if (slot === "boots") {
+        fill = piece.id.includes("sandal") ? "#c4a574" : piece.color;
+        trim = piece.trim;
+      } else if (slot === "gloves" || slot === "shoulder") {
+        fill = piece.color;
+        trim = piece.trim;
       }
     }
-    if (id === "torso" || id === "pelvis") return a.primary;
-    return skin;
-  }
-
-  private face(f: Fighter, c: CanvasRenderingContext2D, r: number) {
-    const face = f.appearance.face;
-    c.fillStyle = "#1a120e";
-    const dir = f.facing;
-    c.fillRect(px(dir * r * 0.2), px(-r * 0.15), 2, 2);
-    c.fillRect(px(dir * r * 0.45), px(-r * 0.15), 2, 2);
-    if (face === 1) {
-      c.fillStyle = "#6b1d2a";
-      c.fillRect(px(-r * 0.2), px(r * 0.05), px(r * 0.7), 2);
+    if (id.startsWith("thigh") || id.startsWith("shin")) {
+      const legs = armorById(f.loadout.armor.legs);
+      if (legs && !legs.id.includes("wrap")) {
+        fill = legs.color;
+        trim = legs.trim;
+      } else fill = skin;
     }
-    if (face === 2) {
-      c.fillStyle = f.appearance.primary;
-      c.fillRect(px(-r * 0.4), px(-r * 0.35), px(r * 0.8), 3);
-    }
-    if (face === 3) {
-      c.fillStyle = "#3b2418";
-      c.fillRect(px(-r * 0.25), px(r * 0.25), px(r * 0.5), 3);
-    }
-    if (face === 4) {
-      c.fillStyle = "#1c242e";
-      c.fillRect(px(-r * 0.45), px(-r * 0.1), px(r * 0.9), px(r * 0.45));
-    }
+    return { fill, trim, metal };
   }
 
   private hair(f: Fighter, cam: Camera) {
     const b = f.head;
     const s = this.w2s(b.position.x, b.position.y, cam);
     const c = this.ctx;
-    const col = HairColors[f.appearance.hairColor] ?? HairColors[0];
-    const style = HairStyles[f.appearance.hair] ?? "short";
     c.save();
     c.translate(px(s.x), px(s.y));
     c.rotate(b.angle);
-    c.fillStyle = col;
-    const z = 9 * cam.zoom;
-    if (style === "short") c.fillRect(px(-z), px(-z - 3), px(z * 2), 4);
-    if (style === "mohawk") c.fillRect(px(-2), px(-z - 8), 4, 10);
-    if (style === "tied") {
-      c.fillRect(px(-z), px(-z - 2), px(z * 2), 4);
-      c.fillRect(px(-3), px(-z - 8), 6, 6);
-    }
-    if (style === "long") c.fillRect(px(-z), px(-2), px(z * 2), px(z + 6));
-    if (style === "wreath") {
-      c.fillStyle = Palette.gold;
-      c.fillRect(px(-z), px(-z), px(z * 2), 3);
-    }
-    if (f.appearance.accessory === 1) {
-      c.fillStyle = f.appearance.primary;
-      const p = this.w2s(f.torso.position.x, f.torso.position.y + 8, cam);
-      c.restore();
-      c.fillRect(px(p.x - 10 * cam.zoom), px(p.y), px(20 * cam.zoom), px(18 * cam.zoom));
-      return;
-    }
+    drawHairStrand(c, f.appearance.hair, HairColors[f.appearance.hairColor] ?? HairColors[0], cam.zoom);
     c.restore();
   }
 
@@ -284,31 +300,21 @@ export class WorldRenderer {
     const def = w.def;
     const lw = def.width * z;
     const lh = def.length * z;
-    c.fillStyle = outline(def.haft);
-    c.fillRect(px(-lw / 2) - 1, px(-lh / 2) - 1, px(lw) + 2, px(lh) + 2);
-    c.fillStyle = def.haft;
-    c.fillRect(px(-lw / 4), px(-lh / 2), px(lw / 2), px(lh));
-    c.fillStyle = def.blade;
+
     if (def.isShield) {
-      c.fillRect(px(-lw / 2), px(-lh / 2), px(lw), px(lh));
-      c.fillStyle = def.haft;
-      c.fillRect(px(-3), px(-3), 6, 6);
+      drawShield(c, lw, lh, def.blade, def.haft, shade(def.blade, -25));
     } else if (def.category === "bow") {
-      c.strokeStyle = def.blade;
-      c.lineWidth = 2;
-      c.beginPath();
-      c.arc(0, 0, lh / 2, -1.2, 1.2);
-      c.stroke();
-    } else if (def.category === "axe" || def.category === "halberd") {
-      c.fillRect(px(-lw / 2), px(-lh / 2), px(lw), px(10 * z));
-      c.fillRect(px(-2), px(-lh / 2), 4, px(lh));
-    } else if (def.category === "hammer" || def.category === "mace") {
-      c.fillRect(px(-lw / 2), px(-lh / 2), px(lw), px(12 * z));
-      c.fillRect(px(-2), px(-lh / 2), 4, px(lh));
+      drawBow(c, lh, def.blade, def.haft);
+    } else if (def.category === "spear" || def.category === "halberd") {
+      drawSpear(c, lw, lh, def.blade, def.haft);
+    } else if (def.category === "axe") {
+      drawAxe(c, lw, lh, def.blade, def.haft);
+    } else if (def.category === "mace") {
+      drawMace(c, lw, lh, def.blade, def.haft);
+    } else if (def.category === "hammer") {
+      drawHammer(c, lw, lh, def.blade, def.haft);
     } else {
-      c.fillRect(px(-lw / 2), px(-lh / 2), px(lw), px(lh * 0.7));
-      c.fillStyle = def.haft;
-      c.fillRect(px(-2), px(lh * 0.1), 4, px(lh * 0.4));
+      drawSword(c, lw, lh, def.blade, shade(def.haft, 30), def.haft);
     }
     c.restore();
   }
@@ -319,10 +325,9 @@ export class WorldRenderer {
     c.save();
     c.translate(px(s.x), px(s.y));
     c.rotate(a.angle);
-    c.fillStyle = Palette.cream;
-    c.fillRect(-10, -1, 18, 3);
-    c.fillStyle = Palette.bronze;
-    c.fillRect(6, -3, 6, 6);
+    outlinedRect(c, -12, -2, 20, 4, Palette.cream);
+    fillRect(c, 6, -4, 6, 8, Palette.bronze);
+    fillRect(c, -14, -1, 4, 2, "#6b4423");
     c.restore();
   }
 
@@ -332,10 +337,9 @@ export class WorldRenderer {
     c.save();
     c.translate(px(s.x), px(s.y));
     c.rotate(angle);
-    c.fillStyle = hp > 0.4 ? Palette.leather : Palette.bark;
-    c.fillRect(-12, -12, 24, 24);
-    c.fillStyle = Palette.gold;
-    c.fillRect(-12, -12, 24, 3);
+    outlinedRect(c, -12, -12, 24, 24, hp > 0.4 ? Palette.leather : Palette.bark);
+    fillRect(c, -12, -12, 24, 4, Palette.gold);
+    fillRect(c, -8, -4, 16, 2, shade(Palette.leather, -20));
     c.restore();
   }
 
@@ -352,9 +356,9 @@ export class WorldRenderer {
 
   private vignette() {
     const c = this.ctx;
-    const g = c.createRadialGradient(GAME_W / 2, GAME_H / 2, 80, GAME_W / 2, GAME_H / 2, 420);
+    const g = c.createRadialGradient(GAME_W / 2, GAME_H / 2, 60, GAME_W / 2, GAME_H / 2, 380);
     g.addColorStop(0, "#0000");
-    g.addColorStop(1, "#00000055");
+    g.addColorStop(1, "#00000066");
     c.fillStyle = g;
     c.fillRect(0, 0, GAME_W, GAME_H);
   }
@@ -376,10 +380,6 @@ export class WorldRenderer {
     const dh = GAME_H * scale;
     t.drawImage(this.buf, (target.width - dw) / 2, (target.height - dh) / 2, dw, dh);
   }
-}
-
-function outline(hex: string) {
-  return "#1a120e";
 }
 
 export interface MatterBodyLite {
