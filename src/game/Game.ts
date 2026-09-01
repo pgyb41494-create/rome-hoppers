@@ -1,4 +1,5 @@
 import "../styles.css";
+import "../styles-hub.css";
 import { armorById } from "../armor/catalog";
 import { ARENAS } from "../arenas/catalog";
 import { AudioEngine } from "../audio/AudioEngine";
@@ -14,7 +15,8 @@ import { grantXp, loadSave, persistSave } from "../progression/Save";
 import { ParticleSystem } from "../render/Particles";
 import { WorldRenderer } from "../render/Renderer";
 import { drawMenuArt, drawPreview, screenToWorld } from "../render/DrawUtil";
-import { AppUI, type ScreenId } from "../ui/AppUI";
+import { AppUI, type PrefightInfo, type ScreenId } from "../ui/AppUI";
+import { computeStats, fighterClass } from "../ui/characterStats";
 import { weaponById } from "../weapons/catalog";
 
 export class Game {
@@ -46,6 +48,7 @@ export class Game {
   resultShown = false;
   menuT = 0;
   hudBuilt = false;
+  prefight: PrefightInfo | null = null;
 
   constructor() {
     this.canvas = document.getElementById("game-canvas") as HTMLCanvasElement;
@@ -63,8 +66,15 @@ export class Game {
   hookUi() {
     this.ui.onNav = (id) => {
       this.audio.ui();
-      if (id === "back") this.setScreen("main");
-      else this.setScreen(id as ScreenId);
+      if (id === "start-fight") {
+        this.bootMatch();
+        return;
+      }
+      if (id === "back") {
+        this.setScreen(this.screen === "prefight" || this.screen === "main" ? "main" : "main");
+        return;
+      }
+      this.setScreen(id as ScreenId);
     };
     this.ui.onPlay = (mode) => this.startMode(mode);
     this.ui.onEquipWeapon = (id, off) => this.equipWeapon(id, off);
@@ -116,7 +126,7 @@ export class Game {
     this.screen = id;
     if (id !== "fight") {
       this.ui.hideHud();
-      this.ui.render(id, this.save, this.settings);
+      this.ui.render(id, this.save, this.settings, this.prefight ?? undefined);
       this.audio.setPhase("menu");
       this.paintPreview();
     }
@@ -142,7 +152,21 @@ export class Game {
     this.audio.resume();
     this.flow = { mode, round: 0, wave: 1, chapter: this.save.campaignChapter, wins: 0 };
     if (mode === "campaign") this.flow.chapter = this.save.campaignChapter;
-    this.bootMatch();
+    this.prefight = this.buildPrefight();
+    this.setScreen("prefight");
+  }
+
+  buildPrefight(): PrefightInfo {
+    const cfg = this.makeConfig();
+    const opp = cfg.p2;
+    return {
+      mode: this.flow.mode,
+      opponentName: opp.appearance.name,
+      opponentClass: fighterClass(opp.loadout),
+      opponentStats: computeStats(this.save, opp.appearance, opp.loadout),
+      rewardXp: 40 + (cfg.mode === "campaign" ? 25 : 0) + this.flow.wave * 4,
+      rewardCoins: 25 + this.save.level * 2,
+    };
   }
 
   bootMatch() {
@@ -316,23 +340,23 @@ export class Game {
     if (!this.hudBuilt) {
       this.hudBuilt = true;
       this.ui.showHud(`
-        <div class="hud-top">
-          <div class="bars">
-            <div class="name" id="n1"></div>
-            <div class="bar hp"><span id="hp1"></span></div>
-            <div class="bar st"><span id="st1"></span></div>
-            <div class="weapon-tag" id="w1"></div>
+        <div class="fight-hud">
+          <div class="fighter-bar left">
+            <div class="medallion"></div>
+            <div class="bar-wrap">
+              <div class="fname" id="n1"></div>
+              <div class="hp-ornate"><span id="hp1"></span><div class="hp-text" id="hpt1"></div></div>
+            </div>
           </div>
-          <div class="center-hud">
-            <div class="timer" id="timer"></div>
-            <div class="combo" id="combo"></div>
+          <div class="fight-timer" id="timer"></div>
+          <div class="fighter-bar right">
+            <div class="medallion"></div>
+            <div class="bar-wrap">
+              <div class="fname" id="n2"></div>
+              <div class="hp-ornate"><span id="hp2"></span><div class="hp-text" id="hpt2"></div></div>
+            </div>
           </div>
-          <div class="bars right">
-            <div class="name" id="n2"></div>
-            <div class="bar hp"><span id="hp2"></span></div>
-            <div class="bar st"><span id="st2"></span></div>
-            <div class="weapon-tag" id="w2"></div>
-          </div>
+          <div class="combo" id="combo" style="position:absolute;left:50%;top:52px;transform:translateX(-50%);font-size:20px;color:#fff;text-shadow:0 2px 8px #000"></div>
         </div>
         <div class="banner hidden" id="banner"></div>
         <div class="pause hidden" id="pause">
@@ -340,7 +364,7 @@ export class Game {
           <button class="primary" id="resume">Resume</button>
           <button id="quit">Quit</button>
         </div>
-        ${m.cfg.mode === "training" ? `<div class="hint" style="position:absolute;left:16px;bottom:16px;pointer-events:none">WASD move · Mouse aim · Click swing (hold to charge) · RMB block · Space jump · Shift dodge · E grab · Q throw</div>` : ""}
+        ${m.cfg.mode === "training" ? `<div class="hint" style="position:absolute;left:16px;bottom:16px;pointer-events:none;color:#f5ead0;text-shadow:0 2px 4px #000">WASD move · Mouse aim · Click swing · RMB block · Space jump · Shift dodge · E grab · Q throw</div>` : ""}
         <div class="chip hidden" id="fps" style="position:absolute;left:12px;bottom:12px"></div>
       `);
       this.ui.hud.querySelector("#resume")?.addEventListener("click", () => {
@@ -359,13 +383,11 @@ export class Game {
       if (el) el.style.width = `${Math.max(0, Math.min(100, pct))}%`;
     };
     setW("#hp1", (a.health / a.maxHealth) * 100);
-    setW("#st1", (a.stamina / a.maxStamina) * 100);
     setW("#hp2", (b.health / b.maxHealth) * 100);
-    setW("#st2", (b.stamina / b.maxStamina) * 100);
-    const w1 = this.ui.hud.querySelector("#w1");
-    const w2 = this.ui.hud.querySelector("#w2");
-    if (w1) w1.textContent = a.weapon?.def.name ?? "Unarmed";
-    if (w2) w2.textContent = b.weapon?.def.name ?? "Unarmed";
+    const hpt1 = this.ui.hud.querySelector("#hpt1");
+    const hpt2 = this.ui.hud.querySelector("#hpt2");
+    if (hpt1) hpt1.textContent = `${Math.max(0, a.health | 0)} / ${a.maxHealth | 0}`;
+    if (hpt2) hpt2.textContent = `${Math.max(0, b.health | 0)} / ${b.maxHealth | 0}`;
     const timer = this.ui.hud.querySelector("#timer");
     if (timer) timer.textContent = String(Math.max(0, Math.ceil(m.timeLeft))).padStart(2, "0");
     const combo = this.ui.hud.querySelector("#combo");

@@ -83,7 +83,7 @@ export function drawPreview(
   c.restore();
 }
 
-function drawGladiatorPreview(
+export function drawGladiatorPreview(
   c: CanvasRenderingContext2D,
   x: number,
   y: number,
