@@ -14,9 +14,9 @@ import { ACHIEVEMENTS, CHALLENGES } from "../progression/Achievements";
 import { grantXp, loadSave, persistSave } from "../progression/Save";
 import { ParticleSystem } from "../render/Particles";
 import { WorldRenderer } from "../render/Renderer";
-import { drawMenuArt, drawPreview, screenToWorld } from "../render/DrawUtil";
+import { drawMenuArt, drawPreview } from "../render/DrawUtil";
 import { AppUI, type PrefightInfo, type ScreenId, type VictoryInfo } from "../ui/AppUI";
-import { CHAR_SLOTS, TUTORIAL_LINES } from "../ui/charSlots";
+import { CHAR_SLOTS, TUTORIAL_LINES, getDeathRecruitOptions } from "../ui/charSlots";
 import { computeStats, fighterClass } from "../ui/characterStats";
 import { weaponById } from "../weapons/catalog";
 
@@ -152,6 +152,7 @@ export class Game {
         this.setScreen("prefight");
       } else this.ui.toast("Need 25 denarii.");
     };
+    this.ui.onRecruitPick = (id) => this.handleRecruitPick(id);
     this.ui.menus.addEventListener("click", (e) => {
       const arena = (e.target as HTMLElement).closest?.("[data-arena]") as HTMLElement | null;
       if (arena?.dataset.arena) {
@@ -180,30 +181,55 @@ export class Game {
     }
   }
 
-  applyCharSlot(id: string) {
+  applyCharSlot(id: string, navigate = true) {
     const slot = CHAR_SLOTS.find((s) => s.id === id);
     if (!slot) return;
     this.save.appearance.name = slot.name;
     this.save.appearance.primary = slot.primary;
     if (slot.loadout.weaponId) this.save.loadout.weaponId = slot.loadout.weaponId;
     if (slot.loadout.offhandId !== undefined) this.save.loadout.offhandId = slot.loadout.offhandId;
-    this.save.charPage = 1;
-    persistSave(this.save);
-    this.setScreen("character");
+    if (navigate) {
+      this.save.charPage = 1;
+      persistSave(this.save);
+      this.setScreen("character");
+    }
   }
 
   buyCharSlot(id: string) {
     const slot = CHAR_SLOTS.find((s) => s.id === id);
-    if (!slot || this.save.unlockedChars.includes(id)) return;
-    if (this.save.coins < slot.cost) {
+    if (!slot) return;
+    if (this.save.unlockedChars.includes(id)) {
+      this.applyCharSlot(id);
+      return;
+    }
+    if (slot.cost > 0 && this.save.coins < slot.cost) {
       this.ui.toast(`Need ${slot.cost} denarii.`);
       return;
     }
-    this.save.coins -= slot.cost;
+    if (slot.cost > 0) this.save.coins -= slot.cost;
     this.save.unlockedChars.push(id);
     persistSave(this.save);
     this.ui.toast(`${slot.name} recruited!`);
     this.applyCharSlot(id);
+  }
+
+  handleRecruitPick(id: string) {
+    const options = getDeathRecruitOptions(this.save);
+    const slot = options.find((s) => s.id === id) ?? CHAR_SLOTS.find((s) => s.id === id);
+    if (!slot) return;
+    if (slot.cost > 0 && this.save.coins < slot.cost) {
+      this.ui.toast(`Need ${slot.cost} denarii.`);
+      return;
+    }
+    if (slot.cost > 0) this.save.coins -= slot.cost;
+    if (!this.save.unlockedChars.includes(id)) this.save.unlockedChars.push(id);
+    this.applyCharSlot(id, false);
+    persistSave(this.save);
+    this.ui.hud.querySelector("#recruit")?.remove();
+    if (this.lastVictory) {
+      this.ui.showVictory(this.save, this.lastVictory);
+      this.ui.hud.querySelector("#victory-ok")?.addEventListener("click", () => this.handleResult("menu"));
+    }
   }
 
   paintPreview() {
@@ -396,19 +422,11 @@ export class Game {
     this.pauseLatch = this.input.pausePressed;
 
     const p1 = this.input.p1;
-    const world = screenToWorld(
-      this.input.mouse.x,
-      this.input.mouse.y,
-      this.canvas.width,
-      this.canvas.height,
-      this.camera.x,
-      this.camera.y,
-      this.camera.zoom,
-      false,
-    );
     if (!this.input.usingTouch) {
-      p1.aimX = world.x - m.fighters[0].torso.position.x;
-      p1.aimY = world.y - m.fighters[0].torso.position.y;
+      if (Math.abs(p1.aimX) < 0.1 && Math.abs(p1.aimY) < 0.1) {
+        p1.aimX = m.fighters[1].torso.position.x - m.fighters[0].torso.position.x;
+        p1.aimY = m.fighters[1].torso.position.y - m.fighters[0].torso.position.y;
+      }
     } else {
       p1.aimX = m.fighters[1].torso.position.x - m.fighters[0].torso.position.x;
       p1.aimY = m.fighters[1].torso.position.y - m.fighters[0].torso.position.y;
@@ -457,7 +475,7 @@ export class Game {
           <button class="primary" id="resume">Resume</button>
           <button id="quit">Quit</button>
         </div>
-        ${m.cfg.mode === "training" ? `<div class="hint" style="position:absolute;left:16px;bottom:16px;pointer-events:none;color:#f5ead0;text-shadow:0 2px 4px #000">WASD move · Mouse aim · Click swing · RMB block · Space jump · Shift dodge · E grab · Q throw</div>` : ""}
+        ${m.cfg.mode === "training" ? `<div class="hint" style="position:absolute;left:16px;bottom:16px;pointer-events:none;color:#f5ead0;text-shadow:0 2px 4px #000">A/D move · ← → swing · ↓ block · ↑/Space jump · Shift dodge</div>` : ""}
         <div class="chip hidden" id="fps" style="position:absolute;left:12px;bottom:12px"></div>
       `);
       this.ui.hud.querySelector("#resume")?.addEventListener("click", () => {
@@ -537,10 +555,13 @@ export class Game {
       perfect,
     };
     this.ui.hud.style.pointerEvents = "auto";
+    if (!win) {
+      this.ui.showRecruit(this.save, getDeathRecruitOptions(this.save));
+      return;
+    }
     this.ui.showVictory(this.save, this.lastVictory);
     this.ui.hud.querySelector("#victory-ok")?.addEventListener("click", () => {
-      if (win) this.handleResult("next");
-      else this.handleResult("menu");
+      this.handleResult("next");
     });
   }
 

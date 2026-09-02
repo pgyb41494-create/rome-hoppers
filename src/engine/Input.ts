@@ -87,17 +87,32 @@ export class Input {
   private fromBinds(b: Keybinds, isP1: boolean): FighterInput {
     const left = this.keys.has(b.left);
     const right = this.keys.has(b.right);
-    const up = this.keys.has(b.up);
-    const down = this.keys.has(b.down);
+    const atkL = this.keys.has(b.attackLeft);
+    const atkR = this.keys.has(b.attackRight);
+    const down = this.keys.has(b.down) || (isP1 && this.keys.has("ArrowDown"));
+    const jump = this.keys.has(b.jump) || (isP1 && this.keys.has("ArrowUp"));
+    let aimX = 0;
+    let aimY = 0;
+    if (atkR) {
+      aimX = 1;
+      aimY = 0;
+    } else if (atkL) {
+      aimX = -1;
+      aimY = 0;
+    } else if (right) {
+      aimX = 1;
+    } else if (left) {
+      aimX = -1;
+    }
     return {
       moveX: (right ? 1 : 0) - (left ? 1 : 0),
-      moveY: (down ? 1 : 0) - (up ? 1 : 0),
-      aimX: 0,
-      aimY: 0,
-      attack: isP1 ? this.mouse.left && !this.mouse.leftHeld : this.keys.has("KeyO"),
-      attackHeld: isP1 ? this.mouse.left : this.keys.has("KeyO"),
-      block: isP1 ? this.mouse.right : this.keys.has("KeyL"),
-      jump: this.keys.has(b.jump),
+      moveY: 0,
+      aimX,
+      aimY,
+      attack: isP1 ? atkL || atkR : atkL || atkR,
+      attackHeld: isP1 ? atkL || atkR : atkL || atkR,
+      block: isP1 ? down : this.keys.has("KeyL"),
+      jump,
       dodge: this.keys.has(b.dodge),
       crouch: down,
       interact: this.keys.has(b.interact),

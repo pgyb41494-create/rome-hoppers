@@ -138,20 +138,20 @@ export function createRagdoll(
     });
 
   const constraints = [
-    joint(head, torso, 0, 10 * h, 0, -13 * h, 0.9),
-    joint(torso, pelvis, 0, 13 * h, 0, -6 * h, 0.95),
-    joint(torso, upperArmL, -10 * w, -10 * h, 0, -9 * h, 0.8),
-    joint(torso, upperArmR, 10 * w, -10 * h, 0, -9 * h, 0.8),
-    joint(upperArmL, forearmL, 0, 9 * h, 0, -8 * h, 0.82),
-    joint(upperArmR, forearmR, 0, 9 * h, 0, -8 * h, 0.82),
-    joint(forearmL, handL, 0, 8 * h, 0, -4 * h, 0.88),
-    joint(forearmR, handR, 0, 8 * h, 0, -4 * h, 0.88),
-    joint(pelvis, thighL, -6 * w, 6 * h, 0, -10 * h, 0.9),
-    joint(pelvis, thighR, 6 * w, 6 * h, 0, -10 * h, 0.9),
-    joint(thighL, shinL, 0, 10 * h, 0, -9 * h, 0.88),
-    joint(thighR, shinR, 0, 10 * h, 0, -9 * h, 0.88),
-    joint(shinL, footL, 0, 9 * h, -2 * w, -3 * h, 0.9),
-    joint(shinR, footR, 0, 9 * h, -2 * w, -3 * h, 0.9),
+    joint(head, torso, 0, 10 * h, 0, -13 * h, 0.97),
+    joint(torso, pelvis, 0, 13 * h, 0, -6 * h, 0.98),
+    joint(torso, upperArmL, -10 * w, -10 * h, 0, -9 * h, 0.72),
+    joint(torso, upperArmR, 10 * w, -10 * h, 0, -9 * h, 0.68),
+    joint(upperArmL, forearmL, 0, 9 * h, 0, -8 * h, 0.7),
+    joint(upperArmR, forearmR, 0, 9 * h, 0, -8 * h, 0.65),
+    joint(forearmL, handL, 0, 8 * h, 0, -4 * h, 0.75),
+    joint(forearmR, handR, 0, 8 * h, 0, -4 * h, 0.7),
+    joint(pelvis, thighL, -6 * w, 6 * h, 0, -10 * h, 0.97),
+    joint(pelvis, thighR, 6 * w, 6 * h, 0, -10 * h, 0.97),
+    joint(thighL, shinL, 0, 10 * h, 0, -9 * h, 0.96),
+    joint(thighR, shinR, 0, 10 * h, 0, -9 * h, 0.96),
+    joint(shinL, footL, 0, 9 * h, -2 * w, -3 * h, 0.96),
+    joint(shinR, footR, 0, 9 * h, -2 * w, -3 * h, 0.96),
   ];
 
   return { bodies, list: Object.values(bodies), constraints, group };

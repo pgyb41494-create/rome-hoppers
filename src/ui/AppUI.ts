@@ -5,9 +5,10 @@ import type { Appearance, ArmorSlot, GameModeId, Loadout, SaveData, SettingsData
 import { ACHIEVEMENTS, CHALLENGES } from "../progression/Achievements";
 import { xpForLevel } from "../progression/Save";
 import { WEAPONS, weaponById } from "../weapons/catalog";
-import { CHAR_SLOTS, TUTORIAL_LINES } from "./charSlots";
+import { CHAR_SLOTS, TUTORIAL_LINES, type CharSlotDef } from "./charSlots";
 import { computeStats, fighterClass, rankTitle, type FighterStats } from "./characterStats";
 import { paintModeTiles } from "./modeArt";
+import { drawBlockyPortrait } from "../render/BlockyGladiator";
 
 export type ScreenId =
   | "tutorial"
@@ -55,6 +56,7 @@ export class AppUI {
   onCharPage: (delta: number) => void = () => undefined;
   onSelectChar: (id: string) => void = () => undefined;
   onBuyChar: (id: string) => void = () => undefined;
+  onRecruitPick: (id: string) => void = () => undefined;
   onPrefightHeal: () => void = () => undefined;
 
   constructor() {
@@ -168,10 +170,15 @@ export class AppUI {
 
       if (page === 0) {
         const activeId = CHAR_SLOTS.find((s) => s.name === save.appearance.name)?.id ?? "swordsman";
+        const menuPicks = [
+          CHAR_SLOTS.find((s) => s.id === "swordsman")!,
+          CHAR_SLOTS.find((s) => s.id === "lancer")!,
+          CHAR_SLOTS.find((s) => s.id === "crusher")!,
+        ];
         this.menus.innerHTML = `<section class="arena-screen sheet">
           ${screenHeader("Character", coins)}
           <div class="char-pick-row">
-            ${CHAR_SLOTS.map((slot) => charSlotCard(slot, save, slot.id === activeId)).join("")}
+            ${menuPicks.map((slot) => charSlotCard(slot, save, slot.id === activeId)).join("")}
           </div>
           <p class="char-blurb">${CHAR_SLOTS.find((s) => s.id === activeId)?.blurb ?? classBlurb(stats.className)}</p>
           <div class="round-nav">
@@ -289,6 +296,24 @@ export class AppUI {
 
     this.bindNav(settings);
     paintModeTiles(this.menus);
+    paintPortraits(this.menus);
+  }
+
+  showRecruit(save: SaveData, options: CharSlotDef[]) {
+    this.hud.insertAdjacentHTML(
+      "beforeend",
+      `<div class="victory-overlay" id="recruit">
+        <h2 class="victory-title">Recruit a gladiator</h2>
+        <p class="hint" style="color:#f5ead0;text-align:center;margin-bottom:14px">Pick a free fighter or hire a premium champion</p>
+        <div class="char-pick-row">
+          ${options.map((slot) => recruitSlotCard(slot, save)).join("")}
+        </div>
+      </div>`,
+    );
+    this.hud.querySelectorAll("[data-recruit]").forEach((el) => {
+      el.addEventListener("click", () => this.onRecruitPick((el as HTMLElement).dataset.recruit!));
+    });
+    paintPortraits(this.hud);
   }
 
   showVictory(save: SaveData, info: VictoryInfo) {
@@ -479,8 +504,8 @@ function hubDrawer() {
   </div>`;
 }
 
-function charSlotCard(slot: (typeof CHAR_SLOTS)[0], save: SaveData, selected: boolean) {
-  const owned = save.unlockedChars.includes(slot.id) || slot.cost === 0;
+function charSlotCard(slot: CharSlotDef, save: SaveData, selected: boolean) {
+  const owned = save.unlockedChars.includes(slot.id) || (slot.cost === 0 && slot.id === "swordsman");
   const stats = computeStats(save);
   const ap = { ...save.appearance, name: slot.name, primary: slot.primary };
   const loadout: Loadout = {
@@ -488,16 +513,46 @@ function charSlotCard(slot: (typeof CHAR_SLOTS)[0], save: SaveData, selected: bo
     weaponId: slot.loadout.weaponId ?? save.loadout.weaponId,
     offhandId: slot.loadout.offhandId !== undefined ? slot.loadout.offhandId : save.loadout.offhandId,
   };
-  return `<div class="char-slot ${owned ? "" : "locked"} ${selected ? "selected" : ""}" data-price="${slot.cost} denarii" data-char="${slot.id}" data-locked="${owned ? 0 : 1}">
+  const price = owned ? "" : slot.cost > 0 ? `${slot.cost} denarii` : "Free";
+  return `<div class="char-slot ${owned ? "" : "locked"} ${selected ? "selected" : ""}" data-price="${price}" data-char="${slot.id}" data-locked="${owned ? 0 : 1}">
+    <canvas class="char-portrait" data-portrait="${slot.id}" width="180" height="200"></canvas>
     ${charCard(ap, loadout, { ...stats, className: slot.className }, false)}
   </div>`;
+}
+
+function recruitSlotCard(slot: CharSlotDef, save: SaveData) {
+  const owned = slot.cost === 0 || save.unlockedChars.includes(slot.id);
+  const canAfford = slot.cost === 0 || save.coins >= slot.cost;
+  const stats = computeStats(save);
+  const ap = { ...save.appearance, name: slot.name, primary: slot.primary };
+  const loadout: Loadout = {
+    ...save.loadout,
+    weaponId: slot.loadout.weaponId ?? save.loadout.weaponId,
+    offhandId: slot.loadout.offhandId !== undefined ? slot.loadout.offhandId : save.loadout.offhandId,
+  };
+  const price = slot.cost === 0 ? "Free" : `${slot.cost} denarii`;
+  return `<button type="button" class="char-slot recruit-slot ${canAfford ? "" : "locked"}" data-price="${price}" data-recruit="${slot.id}" data-locked="${owned || canAfford ? 0 : 1}">
+    <canvas class="char-portrait" data-portrait="${slot.id}" width="180" height="200"></canvas>
+    ${charCard(ap, loadout, { ...stats, className: slot.className }, false)}
+  </button>`;
+}
+
+function paintPortraits(root: ParentNode) {
+  root.querySelectorAll<HTMLCanvasElement>("canvas[data-portrait]").forEach((cv) => {
+    const id = cv.dataset.portrait!;
+    const slot = CHAR_SLOTS.find((s) => s.id === id);
+    if (!slot) return;
+    const ctx = cv.getContext("2d");
+    if (!ctx) return;
+    drawBlockyPortrait(ctx, id, slot.primary, cv.width, cv.height);
+  });
 }
 
 function charCard(ap: Appearance, loadout: Loadout, stats: FighterStats, withCanvas: boolean) {
   return `<div class="char-card">
     <div class="char-class">${escapeHtml(stats.className)}</div>
     <div class="char-name">${escapeHtml(ap.name)}</div>
-    ${withCanvas ? `<canvas class="char-preview" id="preview" width="200" height="220"></canvas>` : `<div style="height:140px"></div>`}
+    ${withCanvas ? `<canvas class="char-preview" id="preview" width="200" height="220"></canvas>` : ""}
     <div class="stat-badge tl" title="Power">⚔ ${stats.power}</div>
     <div class="stat-badge ml" title="Vitality">♥ ${stats.vitality}</div>
     <div class="stat-badge tr" title="Reach">↔ ${stats.reach}</div>

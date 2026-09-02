@@ -8,6 +8,7 @@ import type { WeaponEntity } from "../weapons/Weapon";
 import type { ParticleSystem } from "./Particles";
 import type { Camera } from "../engine/Camera";
 import { GAME_H, GAME_W } from "../core/constants";
+import { drawBlockyGladiator } from "./BlockyGladiator";
 import {
   OUTLINE,
   drawArenaFloor,
@@ -134,13 +135,20 @@ export class WorldRenderer {
   }
 
   private fighter(f: Fighter, cam: Camera) {
-    const feet = this.w2s(
-      (f.ragdoll.bodies.footL.position.x + f.ragdoll.bodies.footR.position.x) / 2,
-      Math.max(f.ragdoll.bodies.footL.position.y, f.ragdoll.bodies.footR.position.y),
-      cam,
-    );
-    drawSandShadow(this.ctx, feet.x, feet.y + 2, 16 * cam.zoom);
+    const feetY = Math.max(f.ragdoll.bodies.footL.position.y, f.ragdoll.bodies.footR.position.y);
+    const feet = this.w2s((f.ragdoll.bodies.footL.position.x + f.ragdoll.bodies.footR.position.x) / 2, feetY, cam);
+    drawSandShadow(this.ctx, feet.x, feet.y + 2, 18 * cam.zoom);
 
+    if (!f.alive) {
+      this.fighterRagdoll(f, cam);
+      return;
+    }
+
+    const anchor = this.w2s(f.torso.position.x, f.pelvis.position.y + 6, cam);
+    drawBlockyGladiator(this.ctx, f, anchor.x, anchor.y, cam.zoom, this.time);
+  }
+
+  private fighterRagdoll(f: Fighter, cam: Camera) {
     if (f.appearance.accessory === 1) this.cape(f, cam);
 
     const order: LimbId[] = [

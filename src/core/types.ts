@@ -116,6 +116,8 @@ export interface Keybinds {
   down: string;
   left: string;
   right: string;
+  attackLeft: string;
+  attackRight: string;
   jump: string;
   dodge: string;
   interact: string;
@@ -211,6 +213,8 @@ export const DefaultKeybinds: Keybinds = {
   down: "KeyS",
   left: "KeyA",
   right: "KeyD",
+  attackLeft: "ArrowLeft",
+  attackRight: "ArrowRight",
   jump: "Space",
   dodge: "ShiftLeft",
   interact: "KeyE",
@@ -223,6 +227,8 @@ export const DefaultP2Keybinds: Keybinds = {
   down: "ArrowDown",
   left: "ArrowLeft",
   right: "ArrowRight",
+  attackLeft: "KeyO",
+  attackRight: "KeyO",
   jump: "KeyP",
   dodge: "Slash",
   interact: "Period",

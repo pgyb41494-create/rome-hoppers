@@ -75,6 +75,33 @@ export function blockPose(facing: number): PoseMap {
   };
 }
 
+export const StiffStandPose: PoseMap = {
+  torso: 0,
+  pelvis: 0,
+  head: 0,
+  thighL: 0.04,
+  thighR: -0.04,
+  shinL: -0.02,
+  shinR: 0.02,
+  footL: 0,
+  footR: 0,
+  upperArmL: 0.25,
+  forearmL: 0.2,
+  upperArmR: -0.55,
+  forearmR: -0.25,
+};
+
+export function swingPose(facing: number, power: number): PoseMap {
+  const s = StiffStandPose;
+  return {
+    ...s,
+    upperArmR: -1.4 * facing * power,
+    forearmR: -0.6 * facing * power,
+    upperArmL: 0.15,
+    forearmL: 0.2,
+  };
+}
+
 export function staggerPose(facing: number): PoseMap {
   return {
     torso: -facing * 0.4,

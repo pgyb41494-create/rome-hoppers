@@ -502,12 +502,31 @@
   margin-bottom: 6px;
 }
 
+.char-slot.recruit-slot {
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+}
+
 .char-preview {
   display: block;
   width: 100%;
   height: auto;
   image-rendering: pixelated;
   margin: 0 auto;
+}
+
+.char-portrait {
+  display: block;
+  width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+  margin-bottom: 4px;
+  border: 3px solid #2a2018;
+  border-radius: 4px;
 }
 
 .stat-badge {
