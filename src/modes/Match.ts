@@ -61,6 +61,8 @@ export class Match {
     const p2App = cfg.dummy ? { ...rivalAppearance("Dummy"), name: "Dummy" } : cfg.p2.appearance;
     const p2 = new Fighter(b.x, b.y, p2App, cfg.p2.loadout, 2, cfg.p2Human);
     p2.isDummy = !!cfg.dummy;
+    p1.facing = 1;
+    p2.facing = -1;
     p1.addToWorld(this.world.world);
     p2.addToWorld(this.world.world);
     this.fighters = [p1, p2];

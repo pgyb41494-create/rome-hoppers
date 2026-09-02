@@ -453,30 +453,33 @@ export class Game {
       this.ui.showHud(`
         <div class="fight-hud">
           <div class="fighter-bar left">
-            <div class="medallion"></div>
+            <div class="medallion player-med"></div>
             <div class="bar-wrap">
               <div class="fname" id="n1"></div>
               <div class="hp-ornate"><span id="hp1"></span><div class="hp-text" id="hpt1"></div></div>
+              <div class="stam-bar"><span id="st1"></span></div>
             </div>
           </div>
-          <div class="fight-timer" id="timer"></div>
+          <div class="fight-timer-wrap"><div class="fight-timer" id="timer">00</div></div>
           <div class="fighter-bar right">
-            <div class="medallion"></div>
+            <div class="medallion rival-med"></div>
             <div class="bar-wrap">
               <div class="fname" id="n2"></div>
-              <div class="hp-ornate"><span id="hp2"></span><div class="hp-text" id="hpt2"></div></div>
+              <div class="hp-ornate rival"><span id="hp2"></span><div class="hp-text" id="hpt2"></div></div>
             </div>
           </div>
-          <div class="combo" id="combo" style="position:absolute;left:50%;top:52px;transform:translateX(-50%);font-size:20px;color:#fff;text-shadow:0 2px 8px #000"></div>
+          <div class="combo" id="combo"></div>
         </div>
         <div class="banner hidden" id="banner"></div>
         <div class="pause hidden" id="pause">
-          <h2 style="font-family:Cinzel,serif;color:var(--gold)">Paused</h2>
-          <button class="primary" id="resume">Resume</button>
-          <button id="quit">Quit</button>
+          <div class="pause-panel">
+            <h2>Paused</h2>
+            <button class="pause-btn primary" id="resume">Resume</button>
+            <button class="pause-btn" id="quit">Quit to Hub</button>
+          </div>
         </div>
-        ${m.cfg.mode === "training" ? `<div class="hint" style="position:absolute;left:16px;bottom:16px;pointer-events:none;color:#f5ead0;text-shadow:0 2px 4px #000">A/D move · ← → swing · ↓ block · ↑/Space jump · Shift dodge</div>` : ""}
-        <div class="chip hidden" id="fps" style="position:absolute;left:12px;bottom:12px"></div>
+        ${m.cfg.mode === "training" ? `<div class="fight-hint">A/D move · ← → swing · ↓ block · ↑/Space jump · Shift dodge</div>` : ""}
+        <div class="chip hidden" id="fps"></div>
       `);
       this.ui.hud.querySelector("#resume")?.addEventListener("click", () => {
         m.paused = false;
@@ -495,6 +498,7 @@ export class Game {
     };
     setW("#hp1", (a.health / a.maxHealth) * 100);
     setW("#hp2", (b.health / b.maxHealth) * 100);
+    setW("#st1", (a.stamina / a.maxStamina) * 100);
     const hpt1 = this.ui.hud.querySelector("#hpt1");
     const hpt2 = this.ui.hud.querySelector("#hpt2");
     if (hpt1) hpt1.textContent = `${Math.max(0, a.health | 0)} / ${a.maxHealth | 0}`;

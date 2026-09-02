@@ -14,6 +14,7 @@ import {
   outlinedRound,
   shade,
 } from "./PixelArt";
+import { swingArmAngles } from "../physics/Pose";
 
 type WeaponKind = "sword" | "spear" | "axe" | "mace" | "hammer";
 type ChestKind = "none" | "plate" | "scale" | "leather" | "muscle";
@@ -307,13 +308,16 @@ export function drawBlockyGladiator(
   const face = f.facing;
   const skin = SkinTones[f.appearance.skin] ?? SkinTones[2];
   const hairColor = HairColors[f.appearance.hairColor] ?? HairColors[0];
-  const hop = f.state === "run" ? Math.abs(Math.sin(time * 13 + f.group)) * 3 : 0;
-  const idle = f.state === "idle" || f.state === "block";
-  const bob = idle ? Math.sin(time * 2.6 + f.group) * 0.6 : 0;
-
   const running = f.state === "run";
-  const legSwing = running ? Math.sin(f.walkT) * 0.5 : 0;
-  const legBend = running ? 0.18 : 0.06;
+  const airborne = f.state === "jump" || !f.onGround;
+  const hopY = (running ? f.hopVisual * 14 : airborne ? 6 : 0) * zoom;
+  const squashY = running ? f.squash : airborne ? 1.06 : 1;
+  const stretchX = running ? 2 - f.squash : 1;
+  const idle = f.state === "idle" || f.state === "block";
+  const bob = idle ? Math.sin(time * 2.6 + f.group) * 0.8 : 0;
+
+  const legSwing = running ? Math.sin(f.walkT) * 0.55 : 0;
+  const legBend = running ? 0.22 + Math.max(0, Math.sin(f.walkT)) * 0.2 : 0.08;
 
   const chest = armorById(f.loadout.armor.chest);
   const helm = armorById(f.loadout.armor.helmet);
@@ -347,9 +351,20 @@ export function drawBlockyGladiator(
     : null;
 
   c.save();
-  c.translate(sx, sy - hop);
-  c.scale(face, 1);
+  c.translate(sx, sy - hopY * zoom - bob);
+  c.scale(face * stretchX, squashY);
   c.scale(zoom, zoom);
+
+  const swingProgress =
+    f.state === "attack" && f.attackDuration > 0 ? 1 - f.attackCd / f.attackDuration : -1;
+  let weaponUpper = f.ragdoll.bodies.upperArmR.angle * face;
+  let weaponFore = f.ragdoll.bodies.forearmR.angle * face;
+  if (swingProgress >= 0) {
+    const swingSign = Math.sign(f.aim.x) || face;
+    const { upper, fore } = swingArmAngles(swingProgress, swingSign);
+    weaponUpper = upper;
+    weaponFore = fore;
+  }
 
   drawBody(c, {
     skin,
@@ -364,12 +379,12 @@ export function drawBlockyGladiator(
     beard: f.appearance.face === 2 || f.appearance.face === 3,
     weapon,
     shield,
-    weaponUpper: f.ragdoll.bodies.upperArmR.angle * face,
-    weaponFore: f.ragdoll.bodies.forearmR.angle * face,
+    weaponUpper,
+    weaponFore,
     legSwing,
     legBend,
     crouch: f.state === "crouch",
-    lean: (f.torso.angle * face) * 0.06,
+    lean: 0,
     bob,
     flash: f.flash > 0,
   });

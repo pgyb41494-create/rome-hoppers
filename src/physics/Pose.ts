@@ -91,6 +91,34 @@ export const StiffStandPose: PoseMap = {
   forearmR: -0.25,
 };
 
+export function runHopPose(t: number): PoseMap {
+  const s = Math.sin(t);
+  const c = Math.cos(t);
+  return {
+    thighL: s * 0.42,
+    thighR: -s * 0.42,
+    shinL: Math.max(0, -s) * 0.55,
+    shinR: Math.max(0, s) * 0.55,
+    footL: -c * 0.14,
+    footR: c * 0.14,
+    pelvis: c * 0.04,
+  };
+}
+
+export function swingArmAngles(progress: number, swingSign: number) {
+  if (progress < 0.2) {
+    const t = progress / 0.2;
+    return { upper: (-2.1 + t * 0.15) * swingSign, fore: (-0.75 + t * 0.1) * swingSign };
+  }
+  if (progress < 0.45) {
+    const t = (progress - 0.2) / 0.25;
+    const ease = t * t * (3 - 2 * t);
+    return { upper: (-1.95 + 3.1 * ease) * swingSign, fore: (-0.65 + 2.0 * ease) * swingSign };
+  }
+  const t = (progress - 0.45) / 0.55;
+  return { upper: (1.15 - 1.35 * t) * swingSign, fore: (1.35 - 1.4 * t) * swingSign };
+}
+
 export function swingPose(facing: number, power: number): PoseMap {
   const s = StiffStandPose;
   return {

@@ -3,7 +3,7 @@ import { armorById } from "../armor/catalog";
 import type { Appearance, ArmorSlot, FighterInput, FighterState, HitInfo, LimbId, Loadout } from "../core/types";
 import { clamp, len, norm } from "../core/math";
 import { applyJointTarget, applyUpright, createRagdoll, type Ragdoll } from "../physics/Ragdoll";
-import { blockPose, crouchPose, IdlePose, jumpPose, staggerPose, StiffStandPose, swingPose, walkPose, type PoseMap } from "../physics/Pose";
+import { blockPose, crouchPose, IdlePose, jumpPose, runHopPose, staggerPose, StiffStandPose, swingArmAngles, swingPose, walkPose, type PoseMap } from "../physics/Pose";
 import { weaponById } from "../weapons/catalog";
 import { WeaponEntity } from "../weapons/Weapon";
 
@@ -63,6 +63,10 @@ export class Fighter {
   stiffMode = true;
   swingT = 0;
   hopPhase = 0;
+  hopVisual = 0;
+  hopCooldown = 0;
+  squash = 1;
+  attackDuration = 0.4;
 
   constructor(x: number, y: number, appearance: Appearance, loadout: Loadout, group: number, isPlayer = false) {
     this.id = `f${nextId++}`;
@@ -189,13 +193,14 @@ export class Fighter {
       return;
     }
 
-    if (Math.abs(input.moveX) > 0.15) this.facing = input.moveX > 0 ? 1 : -1;
+    if (Math.abs(input.moveX) > 0.15) {
+      // Facing is locked per side — never flip to face movement or aim.
+    }
 
     const aimLen = Math.hypot(input.aimX, input.aimY);
     if (aimLen > 0.2) {
       this.aim.x = input.aimX / aimLen;
       this.aim.y = input.aimY / aimLen;
-      if (Math.abs(this.aim.x) > 0.2) this.facing = this.aim.x > 0 ? 1 : -1;
     } else {
       this.aim.x = this.facing;
       this.aim.y = input.crouch ? 0.35 : input.jump ? -0.25 : 0;
@@ -257,27 +262,40 @@ export class Fighter {
       this.move(input.moveX * 0.45, dt);
     } else if (moving) {
       this.state = "run";
-      this.walkT += dt * 10 * this.mobility;
-      this.hopPhase += dt * 12;
-      if (Math.sin(this.hopPhase) > 0.85 && this.onGround) {
-        Matter.Body.applyForce(this.pelvis, this.pelvis.position, { x: 0, y: -0.018 * this.massMul });
+      this.walkT += dt * 14 * this.mobility;
+      this.hopPhase += dt * 15 * this.mobility;
+      this.hopVisual = Math.max(0, Math.sin(this.hopPhase));
+      this.squash = 1 - this.hopVisual * 0.14;
+      if (this.hopVisual > 0.9 && this.onGround && this.hopCooldown <= 0) {
+        const hop = 0.038 * this.massMul;
+        Matter.Body.applyForce(this.pelvis, this.pelvis.position, { x: 0, y: -hop });
+        Matter.Body.applyForce(this.torso, this.torso.position, { x: 0, y: -hop * 0.55 });
+        this.hopCooldown = 0.13;
       }
-      this.applyStiffBody(StiffStandPose, 0.36);
+      this.hopCooldown = Math.max(0, this.hopCooldown - dt);
+      this.applyStiffBody({ ...StiffStandPose, ...runHopPose(this.walkT) }, 0.4);
       this.move(input.moveX, dt);
       this.stamina -= dt * 4;
       this.footstepT -= dt;
     } else {
       this.state = "idle";
+      this.hopVisual = 0;
+      this.squash = 1;
       this.applyStiffBody(StiffStandPose, 0.38);
       this.regen(dt);
     }
 
-    if (this.attackCd > 0.1) {
+    if (this.attackCd > 0.08) {
       this.state = "attack";
       this.swingT = Math.max(this.swingT, this.attackCd);
       this.applyStiffBody(swingPose(this.facing, 0.8 + this.charge * 0.4), 0.34);
     }
-    this.driveArm(this.aim.x || this.facing, this.aim.y, dt, this.state === "attack" ? 0.04 : 0.14);
+    if (this.state === "attack" && this.attackCd > 0) {
+      const progress = 1 - this.attackCd / this.attackDuration;
+      this.driveSwingArm(progress);
+    } else {
+      this.driveArm(this.aim.x || this.facing, this.aim.y, dt, 0.14);
+    }
     this.stand(dt, this.onGround ? 1.1 : 0.4);
     this.limitSpin();
   }
@@ -318,9 +336,23 @@ export class Fighter {
     applyJointTarget(arm, ang - Math.PI / 2, stiffness, 0.08);
     applyJointTarget(fore, ang - Math.PI / 2 + 0.15, stiffness * 0.85, 0.07);
     if (this.weapon) {
-      const wa = this.weapon.body;
       const target = ang - Math.PI / 2;
-      applyJointTarget(wa, target, stiffness * 0.7, 0.05);
+      applyJointTarget(this.weapon.body, target, stiffness * 0.7, 0.05);
+    }
+  }
+
+  driveSwingArm(progress: number) {
+    const swingSign = Math.sign(this.aim.x) || this.facing;
+    const { upper, fore } = swingArmAngles(progress, swingSign);
+    const arm = this.ragdoll.bodies.upperArmR;
+    const foreBody = this.ragdoll.bodies.forearmR;
+    applyJointTarget(arm, upper, 0.45, 0.05);
+    applyJointTarget(foreBody, fore, 0.4, 0.04);
+    if (this.weapon) {
+      applyJointTarget(this.weapon.body, fore - 0.12, 0.32, 0.04);
+      if (progress > 0.22 && progress < 0.5) {
+        Matter.Body.setAngularVelocity(this.weapon.body, swingSign * (0.35 + progress * 0.4));
+      }
     }
   }
 
@@ -333,7 +365,8 @@ export class Fighter {
     this.state = "attack";
     this.didShoot = false;
     this.didSwing = true;
-    this.attackCd = 0.28 + (1 / def.attackSpeed) * 0.35;
+    this.attackDuration = 0.32 + (1 / def.attackSpeed) * 0.38;
+    this.attackCd = this.attackDuration;
     const power = (0.55 + charge * def.chargeMult) * (0.7 + def.weight * 0.2);
     const n = norm(this.aim.x, this.aim.y);
     const impulse = 0.022 * power * def.weight;
