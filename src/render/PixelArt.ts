@@ -258,13 +258,24 @@ export function drawBleachers(c: CanvasRenderingContext2D, groundY: number, camX
 }
 
 export function drawArenaFloor(c: CanvasRenderingContext2D, y: number, w: number) {
-  fillRect(c, 0, y, w, 120, "#c9a56a");
-  fillRect(c, 0, y, w, 4, "#ddbb7a");
-  for (let i = 0; i < w; i += 6) {
-    const shadeAmt = (i % 12 === 0 ? -8 : 6) + ((i * 7) % 5);
-    fillRect(c, i, y + 6 + (i % 9), 3, 2, shade("#c9a56a", shadeAmt));
+  // warm sand base with vertical depth gradient
+  const g = c.createLinearGradient(0, y, 0, y + 120);
+  g.addColorStop(0, "#d8b578");
+  g.addColorStop(0.35, "#c9a56a");
+  g.addColorStop(1, "#a8865012");
+  c.fillStyle = g;
+  c.fillRect(0, px(y), w, 120);
+  // bright lip where sand meets wall shadow
+  fillRect(c, 0, y, w, 3, "#e6c488");
+  fillRect(c, 0, y + 3, w, 2, "#00000022");
+  // scattered grain + pebbles for texture
+  for (let i = 0; i < w; i += 5) {
+    const shadeAmt = (i % 12 === 0 ? -12 : 8) + ((i * 7) % 6);
+    fillRect(c, i, y + 6 + (i % 11), 3, 2, shade("#c9a56a", shadeAmt));
+    if (i % 23 === 0) fillRect(c, i + 2, y + 14 + (i % 7), 2, 2, "#8a6a40");
   }
-  for (let i = 0; i < w; i += 14) fillRect(c, i, y + 2, 8, 2, "#b89258");
+  // faint raked lines
+  for (let i = 0; i < w; i += 16) fillRect(c, i, y + 2, 10, 1, "#b89258");
 }
 
 export function drawDistantArch(c: CanvasRenderingContext2D, x: number, y: number, h: number, color: string) {

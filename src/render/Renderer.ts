@@ -364,9 +364,16 @@ export class WorldRenderer {
 
   private vignette() {
     const c = this.ctx;
-    const g = c.createRadialGradient(GAME_W / 2, GAME_H / 2, 60, GAME_W / 2, GAME_H / 2, 380);
+    // warm sunlit glow from upper area
+    const glow = c.createRadialGradient(GAME_W * 0.5, GAME_H * 0.22, 20, GAME_W * 0.5, GAME_H * 0.22, 320);
+    glow.addColorStop(0, "#ffe6a022");
+    glow.addColorStop(1, "#0000");
+    c.fillStyle = glow;
+    c.fillRect(0, 0, GAME_W, GAME_H);
+    // vignette to focus the action
+    const g = c.createRadialGradient(GAME_W / 2, GAME_H / 2, 90, GAME_W / 2, GAME_H / 2, 400);
     g.addColorStop(0, "#0000");
-    g.addColorStop(1, "#00000066");
+    g.addColorStop(1, "#0a060388");
     c.fillStyle = g;
     c.fillRect(0, 0, GAME_W, GAME_H);
   }
