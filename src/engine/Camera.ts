@@ -19,7 +19,7 @@ export class Camera {
     const mx = (ax + bx) / 2;
     const my = (ay + by) / 2 - 18;
     const dist = Math.hypot(bx - ax, by - ay);
-    this.zoom = clamp(1.05 - dist / 1400, 0.78, 1.08);
+    this.zoom = clamp(1.02 - dist / 1600, 0.68, 1.05);
     this.tx = mx;
     this.ty = my;
     this.x = lerp(this.x, this.tx, 1 - Math.pow(0.012, dt));

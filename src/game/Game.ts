@@ -55,6 +55,7 @@ export class Game {
     this.input = new Input(this.canvas, this.settings.mobile);
     this.resize();
     window.addEventListener("resize", () => this.resize());
+    window.visualViewport?.addEventListener("resize", () => this.resize());
     window.addEventListener("pointerdown", () => this.audio.resume(), { once: true });
     this.hookUi();
     this.ui.render("main", this.save, this.settings);
@@ -124,6 +125,7 @@ export class Game {
 
   setScreen(id: ScreenId) {
     this.screen = id;
+    document.body.classList.toggle("in-fight", id === "fight");
     if (id !== "fight") {
       this.ui.hideHud();
       this.ui.render(id, this.save, this.settings, this.prefight ?? undefined);
@@ -177,6 +179,7 @@ export class Game {
     this.camera.x = this.match.arena.def.w / 2;
     this.camera.y = this.match.arena.def.ground - 80;
     this.screen = "fight";
+    document.body.classList.add("in-fight");
     this.hudBuilt = false;
     this.ui.render("fight", this.save, this.settings);
     this.ui.setupMobile(this.settings, this.input);
@@ -266,8 +269,11 @@ export class Game {
   }
 
   resize() {
-    this.canvas.width = window.innerWidth;
-    this.canvas.height = window.innerHeight;
+    const vp = window.visualViewport;
+    const w = vp?.width ?? window.innerWidth;
+    const h = vp?.height ?? window.innerHeight;
+    this.canvas.width = w;
+    this.canvas.height = h;
   }
 
   loop = () => {
@@ -291,7 +297,15 @@ export class Game {
     this.menuT += dt;
     if (this.screen !== "fight") {
       const art = document.getElementById("menu-art") as HTMLCanvasElement | null;
-      if (art) drawMenuArt(art, this.menuT);
+      if (art) {
+        const w = this.canvas.width;
+        const h = this.canvas.height;
+        if (art.width !== w || art.height !== h) {
+          art.width = w;
+          art.height = h;
+        }
+        drawMenuArt(art, this.menuT);
+      }
       this.drawBackdrop();
       return;
     }
@@ -312,6 +326,7 @@ export class Game {
       this.camera.x,
       this.camera.y,
       this.camera.zoom,
+      true,
     );
     if (!this.input.usingTouch) {
       p1.aimX = world.x - m.fighters[0].torso.position.x;
@@ -529,8 +544,13 @@ export class Game {
   drawBackdrop() {
     const ctx = this.canvas.getContext("2d")!;
     ctx.imageSmoothingEnabled = false;
-    ctx.fillStyle = "#0d1117";
-    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    const h = this.canvas.height;
+    const g = ctx.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, "#1a1410");
+    g.addColorStop(0.5, "#2a1c12");
+    g.addColorStop(1, "#4a3220");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, this.canvas.width, h);
   }
 
   draw(dt: number) {
@@ -540,6 +560,6 @@ export class Game {
     }
     const m = this.match;
     this.renderer.draw(m.arena, m.fighters, m.loose, m.arrows, this.fx, this.camera, dt);
-    this.renderer.blit(this.canvas);
+    this.renderer.blit(this.canvas, true);
   }
 }

@@ -370,15 +370,25 @@ export class WorldRenderer {
     };
   }
 
-  blit(target: HTMLCanvasElement) {
+  blit(target: HTMLCanvasElement, stretch = false) {
     const t = target.getContext("2d")!;
     t.imageSmoothingEnabled = false;
-    t.fillStyle = "#000";
-    t.fillRect(0, 0, target.width, target.height);
-    const scale = Math.max(target.width / GAME_W, target.height / GAME_H);
+    const w = target.width;
+    const h = target.height;
+    if (stretch) {
+      t.drawImage(this.buf, 0, 0, w, h);
+      return;
+    }
+    const bg = t.createLinearGradient(0, 0, 0, h);
+    bg.addColorStop(0, "#1a1410");
+    bg.addColorStop(0.45, "#3a2a1c");
+    bg.addColorStop(1, "#6b4a32");
+    t.fillStyle = bg;
+    t.fillRect(0, 0, w, h);
+    const scale = Math.max(w / GAME_W, h / GAME_H);
     const dw = GAME_W * scale;
     const dh = GAME_H * scale;
-    t.drawImage(this.buf, (target.width - dw) / 2, (target.height - dh) / 2, dw, dh);
+    t.drawImage(this.buf, (w - dw) / 2, (h - dh) / 2, dw, dh);
   }
 }
 

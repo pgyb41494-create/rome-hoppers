@@ -61,7 +61,7 @@ export class AppUI {
 
     if (screen === "main") {
       this.menus.innerHTML = `<section class="arena-screen hub">
-        <canvas id="menu-art" class="menu-bg" width="640" height="360"></canvas>
+        <canvas id="menu-art" class="menu-bg"></canvas>
         <div class="hub-overlay">
           <header class="logo-banner">
             <span class="logo-rome">ROME</span>
@@ -69,12 +69,12 @@ export class AppUI {
           </header>
           ${coins}
           <div class="mode-grid">
-            ${modeTile("campaign", "Campaign", "lg")}
-            ${modeTile("tournament", "Tournament", "lg")}
+            ${modeTile("campaign", "Campaign", "hero")}
+            ${modeTile("tournament", "Tournament", "hero")}
             ${modeTile("survival", "Survival")}
             ${modeTile("versus", "Versus")}
-            ${modeTile("quick", "Quick Fight", "wide")}
-            ${modeTile("training", "Training", "wide")}
+            ${modeTile("quick", "Quick Fight")}
+            ${modeTile("training", "Training")}
           </div>
           <nav class="hub-dock">
             <button data-nav="character" class="dock-btn">Character</button>
@@ -280,11 +280,13 @@ export class AppUI {
 
   showHud(html: string) {
     this.hud.classList.remove("hidden");
+    this.hud.classList.add("fight-hud-layer");
     this.hud.innerHTML = html;
   }
 
   hideHud() {
     this.hud.classList.add("hidden");
+    this.hud.classList.remove("fight-hud-layer");
   }
 
   toast(msg: string) {
@@ -370,7 +372,7 @@ function charCard(ap: Appearance, loadout: Loadout, stats: FighterStats, withCan
 function modeTile(id: string, label: string, size = "") {
   const sz = size ? ` ${size}` : "";
   return `<button class="mode-tile${sz}" data-mode="${id}" type="button">
-    <canvas data-mode-art="${id}" width="280" height="160"></canvas>
+    <div class="tile-art"><canvas data-mode-art="${id}" width="320" height="180"></canvas></div>
     <span class="mode-label">${label}</span>
   </button>`;
 }
