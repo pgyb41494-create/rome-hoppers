@@ -15,7 +15,8 @@ import { grantXp, loadSave, persistSave } from "../progression/Save";
 import { ParticleSystem } from "../render/Particles";
 import { WorldRenderer } from "../render/Renderer";
 import { drawMenuArt, drawPreview, screenToWorld } from "../render/DrawUtil";
-import { AppUI, type PrefightInfo, type ScreenId } from "../ui/AppUI";
+import { AppUI, type PrefightInfo, type ScreenId, type VictoryInfo } from "../ui/AppUI";
+import { CHAR_SLOTS, TUTORIAL_LINES } from "../ui/charSlots";
 import { computeStats, fighterClass } from "../ui/characterStats";
 import { weaponById } from "../weapons/catalog";
 
@@ -49,16 +50,26 @@ export class Game {
   menuT = 0;
   hudBuilt = false;
   prefight: PrefightInfo | null = null;
+  tutorialStep = 0;
+  lastVictory: VictoryInfo | null = null;
+  prefightHeal = false;
+  stage: HTMLElement;
 
   constructor() {
     this.canvas = document.getElementById("game-canvas") as HTMLCanvasElement;
+    this.stage = document.getElementById("stage")!;
     this.input = new Input(this.canvas, this.settings.mobile);
     this.resize();
     window.addEventListener("resize", () => this.resize());
     window.visualViewport?.addEventListener("resize", () => this.resize());
     window.addEventListener("pointerdown", () => this.audio.resume(), { once: true });
     this.hookUi();
-    this.ui.render("main", this.save, this.settings);
+    if (!this.save.tutorialDone) {
+      this.screen = "tutorial";
+      this.ui.render("tutorial", this.save, this.settings, undefined, 0);
+    } else {
+      this.ui.render("main", this.save, this.settings);
+    }
     this.ui.setupMobile(this.settings, this.input);
     this.audio.setPhase("menu");
     requestAnimationFrame(this.loop);
@@ -71,8 +82,26 @@ export class Game {
         this.bootMatch();
         return;
       }
+      if (id === "tutorial-next") {
+        this.tutorialStep += 1;
+        if (this.tutorialStep >= TUTORIAL_LINES.length) {
+          this.save.tutorialDone = true;
+          persistSave(this.save);
+          this.setScreen("main");
+        } else {
+          this.ui.render("tutorial", this.save, this.settings, undefined, this.tutorialStep);
+          this.paintPreview();
+        }
+        return;
+      }
+      if (id === "drawer-toggle") {
+        this.ui.drawerOpen = !this.ui.drawerOpen;
+        this.ui.render("main", this.save, this.settings);
+        this.paintPreview();
+        return;
+      }
       if (id === "back") {
-        this.setScreen(this.screen === "prefight" || this.screen === "main" ? "main" : "main");
+        this.setScreen(this.screen === "prefight" ? "main" : "main");
         return;
       }
       this.setScreen(id as ScreenId);
@@ -107,6 +136,22 @@ export class Game {
       };
     };
     this.ui.onResult = (a) => this.handleResult(a);
+    this.ui.onCharPage = (d) => {
+      this.save.charPage = Math.max(0, Math.min(2, this.save.charPage + d));
+      persistSave(this.save);
+      this.setScreen("character");
+    };
+    this.ui.onSelectChar = (id) => this.applyCharSlot(id);
+    this.ui.onBuyChar = (id) => this.buyCharSlot(id);
+    this.ui.onPrefightHeal = () => {
+      if (this.save.coins >= 25) {
+        this.save.coins -= 25;
+        this.prefightHeal = true;
+        persistSave(this.save);
+        this.ui.toast("Healing wine purchased.");
+        this.setScreen("prefight");
+      } else this.ui.toast("Need 25 denarii.");
+    };
     this.ui.menus.addEventListener("click", (e) => {
       const arena = (e.target as HTMLElement).closest?.("[data-arena]") as HTMLElement | null;
       if (arena?.dataset.arena) {
@@ -125,13 +170,40 @@ export class Game {
 
   setScreen(id: ScreenId) {
     this.screen = id;
+    if (id !== "main") this.ui.drawerOpen = false;
     document.body.classList.toggle("in-fight", id === "fight");
     if (id !== "fight") {
       this.ui.hideHud();
-      this.ui.render(id, this.save, this.settings, this.prefight ?? undefined);
+      this.ui.render(id, this.save, this.settings, this.prefight ?? undefined, this.tutorialStep);
       this.audio.setPhase("menu");
       this.paintPreview();
     }
+  }
+
+  applyCharSlot(id: string) {
+    const slot = CHAR_SLOTS.find((s) => s.id === id);
+    if (!slot) return;
+    this.save.appearance.name = slot.name;
+    this.save.appearance.primary = slot.primary;
+    if (slot.loadout.weaponId) this.save.loadout.weaponId = slot.loadout.weaponId;
+    if (slot.loadout.offhandId !== undefined) this.save.loadout.offhandId = slot.loadout.offhandId;
+    this.save.charPage = 1;
+    persistSave(this.save);
+    this.setScreen("character");
+  }
+
+  buyCharSlot(id: string) {
+    const slot = CHAR_SLOTS.find((s) => s.id === id);
+    if (!slot || this.save.unlockedChars.includes(id)) return;
+    if (this.save.coins < slot.cost) {
+      this.ui.toast(`Need ${slot.cost} denarii.`);
+      return;
+    }
+    this.save.coins -= slot.cost;
+    this.save.unlockedChars.push(id);
+    persistSave(this.save);
+    this.ui.toast(`${slot.name} recruited!`);
+    this.applyCharSlot(id);
   }
 
   paintPreview() {
@@ -152,8 +224,10 @@ export class Game {
 
   startMode(mode: GameModeId) {
     this.audio.resume();
+    this.ui.drawerOpen = false;
     this.flow = { mode, round: 0, wave: 1, chapter: this.save.campaignChapter, wins: 0 };
     if (mode === "campaign") this.flow.chapter = this.save.campaignChapter;
+    this.prefightHeal = false;
     this.prefight = this.buildPrefight();
     this.setScreen("prefight");
   }
@@ -174,8 +248,13 @@ export class Game {
   bootMatch() {
     this.match?.destroy();
     this.resultShown = false;
+    this.lastVictory = null;
     const cfg = this.makeConfig();
     this.match = new Match(cfg, this.settings.quality);
+    if (this.prefightHeal) {
+      this.match.fighters[0].health = this.match.fighters[0].maxHealth;
+      this.prefightHeal = false;
+    }
     this.camera.x = this.match.arena.def.w / 2;
     this.camera.y = this.match.arena.def.ground - 80;
     this.screen = "fight";
@@ -269,9 +348,8 @@ export class Game {
   }
 
   resize() {
-    const vp = window.visualViewport;
-    const w = vp?.width ?? window.innerWidth;
-    const h = vp?.height ?? window.innerHeight;
+    const w = this.stage.clientWidth;
+    const h = this.stage.clientHeight;
     this.canvas.width = w;
     this.canvas.height = h;
   }
@@ -326,7 +404,7 @@ export class Game {
       this.camera.x,
       this.camera.y,
       this.camera.zoom,
-      true,
+      false,
     );
     if (!this.input.usingTouch) {
       p1.aimX = world.x - m.fighters[0].torso.position.x;
@@ -449,24 +527,21 @@ export class Game {
     this.progressModes(win);
     persistSave(this.save);
     this.audio.setPhase("end");
-    const title = m.winner === 0 ? "DRAW" : win ? "VICTORY" : "DEFEAT";
+    const xpGain = win ? 40 + (m.cfg.mode === "campaign" ? 25 : 0) + this.flow.wave * 4 : 12;
+    const coinGain = win ? 25 + this.save.level * 2 : 0;
+    this.lastVictory = {
+      win,
+      title: m.winner === 0 ? "Draw" : win ? "Decisive Victory!" : "Defeat",
+      xpGain,
+      coinGain,
+      perfect,
+    };
     this.ui.hud.style.pointerEvents = "auto";
-    this.ui.hud.insertAdjacentHTML(
-      "beforeend",
-      `<div class="result">
-        <h2>${title}</h2>
-        <p class="hint">${win ? "The crowd stamps the sand for you." : "The dust takes another name."}</p>
-        <p class="hint">+${win ? 40 : 12} XP · ${this.save.coins} denarii · Level ${this.save.level}</p>
-        <div class="row">
-          <button class="primary" id="r-retry">Fight again</button>
-          <button id="r-next">${this.nextLabel()}</button>
-          <button id="r-menu">Menu</button>
-        </div>
-      </div>`,
-    );
-    this.ui.hud.querySelector("#r-retry")?.addEventListener("click", () => this.handleResult("retry"));
-    this.ui.hud.querySelector("#r-next")?.addEventListener("click", () => this.handleResult("next"));
-    this.ui.hud.querySelector("#r-menu")?.addEventListener("click", () => this.handleResult("menu"));
+    this.ui.showVictory(this.save, this.lastVictory);
+    this.ui.hud.querySelector("#victory-ok")?.addEventListener("click", () => {
+      if (win) this.handleResult("next");
+      else this.handleResult("menu");
+    });
   }
 
   nextLabel() {
@@ -496,6 +571,7 @@ export class Game {
   }
 
   handleResult(action: "menu" | "retry" | "next") {
+    this.ui.hud.querySelector("#victory")?.remove();
     if (action === "menu") {
       this.match?.destroy();
       this.match = null;
@@ -560,6 +636,6 @@ export class Game {
     }
     const m = this.match;
     this.renderer.draw(m.arena, m.fighters, m.loose, m.arrows, this.fx, this.camera, dt);
-    this.renderer.blit(this.canvas, true);
+    this.renderer.blit(this.canvas, false);
   }
 }

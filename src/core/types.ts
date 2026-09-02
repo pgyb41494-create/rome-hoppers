@@ -156,6 +156,9 @@ export interface SaveData {
   unlockedWeapons: string[];
   unlockedArmor: string[];
   unlockedArenas: string[];
+  unlockedChars: string[];
+  tutorialDone: boolean;
+  charPage: number;
   appearance: Appearance;
   loadout: Loadout;
   campaignChapter: number;
